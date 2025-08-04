@@ -1,67 +1,61 @@
 <!DOCTYPE html>
 <html lang="ar">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>واتساب ويب بسيط</title>
-<style>
+  <meta charset="UTF-8">
+  <title>واتساب ويب بسيط</title>
+  <style>
     body { font-family: Arial; display: flex; }
-    #sidebar { width: 30%; border-right: 1px solid #ccc; height: 100vh; overflow-y: auto; }
+    #sidebar { width: 250px; border-right: 1px solid #ccc; padding: 10px; }
     #chat { flex: 1; padding: 10px; }
-    .chat-item { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
-    .chat-item:hover { background: #f0f0f0; }
-    .message { margin-bottom: 8px; padding: 5px; border-bottom: 1px solid #ddd; }
-</style>
-<script src="/socket.io/socket.io.js"></script>
+    img { width: 200px; }
+    .chat-item { padding: 5px; cursor: pointer; border-bottom: 1px solid #eee; }
+  </style>
 </head>
 <body>
-<div id="sidebar">
+  <div id="sidebar">
     <h3>المحادثات</h3>
-    <div id="chat-list"></div>
-</div>
-<div id="chat">
-    <h3>اختر محادثة</h3>
+    <div id="chatList">جارٍ التحميل...</div>
+  </div>
+  <div id="chat">
+    <h3>المحادثة</h3>
     <div id="messages"></div>
-</div>
+  </div>
 
-<script>
+  <div id="qr"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
     const socket = io();
+    const chatListDiv = document.getElementById('chatList');
+    const messagesDiv = document.getElementById('messages');
+    const qrDiv = document.getElementById('qr');
 
-    socket.on('qr', (data) => {
-        document.body.innerHTML = `<h2>امسح هذا QR لربط واتساب</h2><img src="${data}" />`;
+    socket.on('qr', (qr) => {
+      qrDiv.innerHTML = `<h3>امسح QR لربط واتساب:</h3><img src="${qr}" />`;
     });
 
-    socket.on('ready', () => {
-        alert('✅ تم الاتصال بواتساب');
-        fetchChats();
+    socket.on('chats', (chats) => {
+      chatListDiv.innerHTML = '';
+      chats.forEach(chat => {
+        const div = document.createElement('div');
+        div.className = 'chat-item';
+        div.textContent = chat.name;
+        div.onclick = () => {
+          socket.emit('getMessages', chat.id);
+        };
+        chatListDiv.appendChild(div);
+      });
     });
 
-    async function fetchChats() {
-        const res = await fetch('/api/chats');
-        const chats = await res.json();
-        const chatList = document.getElementById('chat-list');
-        chatList.innerHTML = '';
-        chats.forEach(chat => {
-            const div = document.createElement('div');
-            div.className = 'chat-item';
-            div.innerText = chat.name || chat.id;
-            div.onclick = () => loadMessages(chat.id);
-            chatList.appendChild(div);
-        });
-    }
-
-    async function loadMessages(jid) {
-        const res = await fetch(`/api/messages/${jid}`);
-        const messages = await res.json();
-        const msgContainer = document.getElementById('messages');
-        msgContainer.innerHTML = '';
-        messages.forEach(m => {
-            const div = document.createElement('div');
-            div.className = 'message';
-            div.innerText = m.message?.conversation || m.message?.extendedTextMessage?.text || '[وسائط]';
-            msgContainer.appendChild(div);
-        });
-    }
-</script>
+    socket.on('messages', ({ jid, messages }) => {
+      messagesDiv.innerHTML = '';
+      messages.forEach(m => {
+        const text = m.message?.conversation || '[رسالة غير نصية]';
+        const p = document.createElement('p');
+        p.textContent = text;
+        messagesDiv.appendChild(p);
+      });
+    });
+  </script>
 </body>
 </html>
