@@ -1,69 +1,98 @@
 const express = require('express');
 const http = require('http');
-const socketIo = require('socket.io');
+const { Server } = require('socket.io');
 const qrcode = require('qrcode');
-const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion
+} = require('@whiskeysockets/baileys');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = new Server(server);
+
 const PORT = process.env.PORT || 3000;
 
-let sock;
-let chats = [];
+// 📂 مجلد لتخزين الجلسة
+const SESSION_DIR = path.join(__dirname, 'session');
+fs.mkdirSync(SESSION_DIR, { recursive: true });
 
-app.use(express.static('public'));
+// 📂 مجلد public للواجهة
+app.use(express.static(path.join(__dirname, 'public')));
 
-// عند الاتصال عبر Socket.io
-io.on('connection', (socket) => {
-  console.log('✅ متصل بالواجهة');
-
-  // إرسال المحادثات للواجهة
-  socket.emit('chats', chats);
-
-  // عند اختيار محادثة لعرض الرسائل
-  socket.on('getMessages', async (jid) => {
-    if (!sock) return;
-    try {
-      const messages = await sock.loadMessages(jid, 20);
-      socket.emit('messages', { jid, messages });
-    } catch (e) {
-      console.error('❌ خطأ في جلب الرسائل:', e.message);
-    }
-  });
+// ✅ عند فتح السيرفر
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-async function connectToWhatsApp() {
-  const { state, saveCreds } = await useMultiFileAuthState('./session');
+let sock;
+
+// ✅ تشغيل واتساب
+async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
   const { version } = await fetchLatestBaileysVersion();
 
-  sock = makeWASocket({ auth: state, printQRInTerminal: false, version });
-
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, qr } = update;
-    if (qr) {
-      const qrImage = await qrcode.toDataURL(qr);
-      io.emit('qr', qrImage);
-    }
-    if (connection === 'open') {
-      console.log('✅ تم الاتصال بنجاح');
-      await loadChats();
-    }
+  sock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: false
   });
 
   sock.ev.on('creds.update', saveCreds);
 
-  sock.ev.on('messages.upsert', (m) => {
-    console.log('📩 رسالة جديدة:', m.messages[0]?.key.remoteJid);
+  // ✅ عند ظهور QR
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, qr } = update;
+
+    if (qr) {
+      const qrImage = await qrcode.toDataURL(qr);
+      io.emit('qr', qrImage);
+    }
+
+    if (connection === 'open') {
+      console.log('✅ تم الاتصال بنجاح');
+      io.emit('connected'); // 🔹 إشعار الواجهة أن الاتصال تم
+      await loadChats();
+    }
+  });
+
+  // ✅ استقبال الرسائل الجديدة
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    console.log('📩 رسالة جديدة:', messages[0]?.message?.conversation);
   });
 }
 
+// ✅ تحميل المحادثات بعد الاتصال
 async function loadChats() {
-  const allChats = await sock.chats.all();
-  chats = allChats.map(c => ({ id: c.id, name: c.name || c.id }));
-  io.emit('chats', chats);
+  try {
+    const chats = await sock.store?.chats || [];
+    const formattedChats = chats.map(c => ({
+      id: c.id,
+      name: c.name || c.id
+    }));
+    io.emit('chats', formattedChats);
+  } catch (err) {
+    console.error('❌ خطأ أثناء تحميل المحادثات:', err.message);
+  }
 }
 
-connectToWhatsApp();
+// ✅ جلب الرسائل عند اختيار المحادثة
+io.on('connection', (socket) => {
+  socket.on('getMessages', async (jid) => {
+    try {
+      const messages = await sock.fetchMessagesFromWA(jid, 20); // آخر 20 رسالة
+      socket.emit('messages', { jid, messages });
+    } catch (err) {
+      console.error('❌ خطأ في جلب الرسائل:', err.message);
+    }
+  });
+});
 
-server.listen(PORT, () => console.log(`🚀 السيرفر يعمل على http://localhost:${PORT}`));
+// ✅ بدء السيرفر
+server.listen(PORT, () => {
+  console.log(`🚀 السيرفر شغال على http://localhost:${PORT}`);
+  startBot();
+});
