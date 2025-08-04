@@ -1,22 +1,67 @@
 <!DOCTYPE html>
 <html lang="ar">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>معلومات قناة واتساب</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>واتساب ويب بسيط</title>
+<style>
+    body { font-family: Arial; display: flex; }
+    #sidebar { width: 30%; border-right: 1px solid #ccc; height: 100vh; overflow-y: auto; }
+    #chat { flex: 1; padding: 10px; }
+    .chat-item { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
+    .chat-item:hover { background: #f0f0f0; }
+    .message { margin-bottom: 8px; padding: 5px; border-bottom: 1px solid #ddd; }
+</style>
+<script src="/socket.io/socket.io.js"></script>
 </head>
-<body class="bg-dark text-light">
-    <div class="container py-5">
-        <h1 class="text-center mb-4">📡 جلب معلومات قناة واتساب</h1>
-        <div class="card p-4 shadow-lg">
-            <input type="text" id="channelLink" class="form-control mb-3" placeholder="أدخل رابط القناة هنا...">
-            <button class="btn btn-primary w-100" onclick="getChannelInfo()">جلب المعلومات</button>
-        </div>
-        <div id="result" class="mt-4"></div>
-    </div>
+<body>
+<div id="sidebar">
+    <h3>المحادثات</h3>
+    <div id="chat-list"></div>
+</div>
+<div id="chat">
+    <h3>اختر محادثة</h3>
+    <div id="messages"></div>
+</div>
 
-    <script src="script.js"></script>
+<script>
+    const socket = io();
+
+    socket.on('qr', (data) => {
+        document.body.innerHTML = `<h2>امسح هذا QR لربط واتساب</h2><img src="${data}" />`;
+    });
+
+    socket.on('ready', () => {
+        alert('✅ تم الاتصال بواتساب');
+        fetchChats();
+    });
+
+    async function fetchChats() {
+        const res = await fetch('/api/chats');
+        const chats = await res.json();
+        const chatList = document.getElementById('chat-list');
+        chatList.innerHTML = '';
+        chats.forEach(chat => {
+            const div = document.createElement('div');
+            div.className = 'chat-item';
+            div.innerText = chat.name || chat.id;
+            div.onclick = () => loadMessages(chat.id);
+            chatList.appendChild(div);
+        });
+    }
+
+    async function loadMessages(jid) {
+        const res = await fetch(`/api/messages/${jid}`);
+        const messages = await res.json();
+        const msgContainer = document.getElementById('messages');
+        msgContainer.innerHTML = '';
+        messages.forEach(m => {
+            const div = document.createElement('div');
+            div.className = 'message';
+            div.innerText = m.message?.conversation || m.message?.extendedTextMessage?.text || '[وسائط]';
+            msgContainer.appendChild(div);
+        });
+    }
+</script>
 </body>
 </html>
