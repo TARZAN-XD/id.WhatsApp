@@ -1,67 +1,69 @@
 const express = require('express');
-const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, makeInMemoryStore } = require('@whiskeysockets/baileys');
-const qrcode = require('qrcode');
-const path = require('path');
 const http = require('http');
-const socketIO = require('socket.io');
-const fs = require('fs');
+const socketIo = require('socket.io');
+const qrcode = require('qrcode');
+const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIO(server);
+const io = socketIo(server);
+const PORT = process.env.PORT || 3000;
 
-const PORT = process.env.PORT || 5000;
-
-app.use(express.static(path.join(__dirname, 'public')));
-
-// ✅ إنشاء store لحفظ الرسائل والمحادثات
-const store = makeInMemoryStore({});
-
-// ✅ تهيئة واتساب
 let sock;
+let chats = [];
 
-async function startWhatsApp() {
-    const { state, saveCreds } = await useMultiFileAuthState('sessions');
-    const { version } = await fetchLatestBaileysVersion();
+app.use(express.static('public'));
 
-    sock = makeWASocket({
-        version,
-        auth: state,
-        printQRInTerminal: false,
-        syncFullHistory: true
-    });
+// عند الاتصال عبر Socket.io
+io.on('connection', (socket) => {
+  console.log('✅ متصل بالواجهة');
 
-    store.bind(sock.ev);
-    sock.ev.on('creds.update', saveCreds);
+  // إرسال المحادثات للواجهة
+  socket.emit('chats', chats);
 
-    sock.ev.on('connection.update', async (update) => {
-        const { connection, qr } = update;
-        if (qr) {
-            const qrImage = await qrcode.toDataURL(qr);
-            io.emit('qr', qrImage);
-        }
-        if (connection === 'open') {
-            console.log('✅ واتساب متصل');
-            io.emit('ready');
-        }
-    });
+  // عند اختيار محادثة لعرض الرسائل
+  socket.on('getMessages', async (jid) => {
+    if (!sock) return;
+    try {
+      const messages = await sock.loadMessages(jid, 20);
+      socket.emit('messages', { jid, messages });
+    } catch (e) {
+      console.error('❌ خطأ في جلب الرسائل:', e.message);
+    }
+  });
+});
+
+async function connectToWhatsApp() {
+  const { state, saveCreds } = await useMultiFileAuthState('./session');
+  const { version } = await fetchLatestBaileysVersion();
+
+  sock = makeWASocket({ auth: state, printQRInTerminal: false, version });
+
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, qr } = update;
+    if (qr) {
+      const qrImage = await qrcode.toDataURL(qr);
+      io.emit('qr', qrImage);
+    }
+    if (connection === 'open') {
+      console.log('✅ تم الاتصال بنجاح');
+      await loadChats();
+    }
+  });
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('messages.upsert', (m) => {
+    console.log('📩 رسالة جديدة:', m.messages[0]?.key.remoteJid);
+  });
 }
 
-startWhatsApp();
+async function loadChats() {
+  const allChats = await sock.chats.all();
+  chats = allChats.map(c => ({ id: c.id, name: c.name || c.id }));
+  io.emit('chats', chats);
+}
 
-// ✅ API لجلب المحادثات
-app.get('/api/chats', (req, res) => {
-    const chats = store.chats.all();
-    res.json(chats);
-});
+connectToWhatsApp();
 
-// ✅ API لجلب الرسائل لمحادثة معينة
-app.get('/api/messages/:jid', (req, res) => {
-    const jid = req.params.jid;
-    const messages = store.messages[jid]?.array || [];
-    res.json(messages);
-});
-
-server.listen(PORT, () => {
-    console.log(`🚀 السيرفر شغال على http://localhost:${PORT}`);
-});
+server.listen(PORT, () => console.log(`🚀 السيرفر يعمل على http://localhost:${PORT}`));
