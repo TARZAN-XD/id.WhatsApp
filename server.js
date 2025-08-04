@@ -1,43 +1,67 @@
 const express = require('express');
-const axios = require('axios');
-const cheerio = require('cheerio');
+const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, makeInMemoryStore } = require('@whiskeysockets/baileys');
+const qrcode = require('qrcode');
 const path = require('path');
+const http = require('http');
+const socketIO = require('socket.io');
+const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const server = http.createServer(app);
+const io = socketIO(server);
+
+const PORT = process.env.PORT || 5000;
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/channel-info', async (req, res) => {
-    const { link } = req.query;
+// ✅ إنشاء store لحفظ الرسائل والمحادثات
+const store = makeInMemoryStore({});
 
-    if (!link || !link.includes('whatsapp.com/channel/')) {
-        return res.status(400).json({ status: 400, message: '❌ يرجى إدخال رابط قناة صحيح.' });
-    }
+// ✅ تهيئة واتساب
+let sock;
 
-    try {
-        const { data } = await axios.get(link, {
-            headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'ar,en;q=0.9' }
-        });
+async function startWhatsApp() {
+    const { state, saveCreds } = await useMultiFileAuthState('sessions');
+    const { version } = await fetchLatestBaileysVersion();
 
-        const $ = cheerio.load(data);
-        const title = $('meta[property="og:title"]').attr('content') || 'غير معروف';
-        const image = $('meta[property="og:image"]').attr('content') || '';
-        const description = $('meta[property="og:description"]').attr('content') || 'لا يوجد وصف';
-        const inviteId = link.split('/channel/')[1];
+    sock = makeWASocket({
+        version,
+        auth: state,
+        printQRInTerminal: false,
+        syncFullHistory: true
+    });
 
-        res.json({
-            status: 200,
-            id: inviteId,
-            name: title,
-            description,
-            image,
-            link
-        });
-    } catch (error) {
-        console.error('❌ خطأ أثناء الجلب:', error.message);
-        return res.status(500).json({ status: 500, message: '❌ تعذر جلب بيانات القناة.' });
-    }
+    store.bind(sock.ev);
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', async (update) => {
+        const { connection, qr } = update;
+        if (qr) {
+            const qrImage = await qrcode.toDataURL(qr);
+            io.emit('qr', qrImage);
+        }
+        if (connection === 'open') {
+            console.log('✅ واتساب متصل');
+            io.emit('ready');
+        }
+    });
+}
+
+startWhatsApp();
+
+// ✅ API لجلب المحادثات
+app.get('/api/chats', (req, res) => {
+    const chats = store.chats.all();
+    res.json(chats);
 });
 
-app.listen(PORT, () => console.log(`🚀 السيرفر يعمل على http://localhost:${PORT}`));
+// ✅ API لجلب الرسائل لمحادثة معينة
+app.get('/api/messages/:jid', (req, res) => {
+    const jid = req.params.jid;
+    const messages = store.messages[jid]?.array || [];
+    res.json(messages);
+});
+
+server.listen(PORT, () => {
+    console.log(`🚀 السيرفر شغال على http://localhost:${PORT}`);
+});
