@@ -1,40 +1,84 @@
 <!DOCTYPE html>
 <html lang="ar">
 <head>
-  <meta charset="UTF-8">
-  <title>واتساب ويب بسيط</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WhatsApp Web بسيط</title>
   <style>
-    body { font-family: Arial; display: flex; }
-    #sidebar { width: 250px; border-right: 1px solid #ccc; padding: 10px; }
-    #chat { flex: 1; padding: 10px; }
-    img { width: 200px; }
-    .chat-item { padding: 5px; cursor: pointer; border-bottom: 1px solid #eee; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f1f1f1;
+      margin: 0;
+      padding: 0;
+    }
+    #qr {
+      text-align: center;
+      padding: 50px;
+    }
+    #app {
+      display: none;
+      height: 100vh;
+      display: flex;
+    }
+    #sidebar {
+      width: 30%;
+      background: #fff;
+      padding: 10px;
+      overflow-y: auto;
+      border-right: 1px solid #ccc;
+    }
+    #chat {
+      flex: 1;
+      padding: 10px;
+      overflow-y: auto;
+    }
+    .chat-item {
+      padding: 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+    .chat-item:hover {
+      background: #e6e6e6;
+    }
+    #messages p {
+      background: #fff;
+      padding: 8px;
+      border-radius: 5px;
+      margin: 5px 0;
+    }
   </style>
 </head>
 <body>
-  <div id="sidebar">
-    <h3>المحادثات</h3>
-    <div id="chatList">جارٍ التحميل...</div>
-  </div>
-  <div id="chat">
-    <h3>المحادثة</h3>
-    <div id="messages"></div>
-  </div>
-
   <div id="qr"></div>
+
+  <div id="app">
+    <div id="sidebar">
+      <h3>المحادثات</h3>
+      <div id="chatList">جارٍ التحميل...</div>
+    </div>
+    <div id="chat">
+      <h3>المحادثة</h3>
+      <div id="messages"></div>
+    </div>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-    const chatListDiv = document.getElementById('chatList');
-    const messagesDiv = document.getElementById('messages');
     const qrDiv = document.getElementById('qr');
+    const appDiv = document.getElementById('app');
 
     socket.on('qr', (qr) => {
       qrDiv.innerHTML = `<h3>امسح QR لربط واتساب:</h3><img src="${qr}" />`;
     });
 
+    socket.on('connected', () => {
+      qrDiv.style.display = 'none'; // 🔹 إخفاء QR
+      appDiv.style.display = 'flex'; // 🔹 إظهار واجهة التطبيق
+    });
+
     socket.on('chats', (chats) => {
+      const chatListDiv = document.getElementById('chatList');
       chatListDiv.innerHTML = '';
       chats.forEach(chat => {
         const div = document.createElement('div');
@@ -48,6 +92,7 @@
     });
 
     socket.on('messages', ({ jid, messages }) => {
+      const messagesDiv = document.getElementById('messages');
       messagesDiv.innerHTML = '';
       messages.forEach(m => {
         const text = m.message?.conversation || '[رسالة غير نصية]';
