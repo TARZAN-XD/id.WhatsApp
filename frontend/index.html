@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elite Video Downloader</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🔥 Elite Video Downloader</h1>
+    <input type="text" id="videoUrl" placeholder="أدخل رابط الفيديو أو كلمات البحث">
+    <select id="format">
+      <option value="video">📹 فيديو</option>
+      <option value="audio">🎵 صوت فقط</option>
+    </select>
+    <button onclick="downloadVideo()">تحميل</button>
+    <div id="result"></div>
+    <a href="docs.html" class="docs-btn">📜 API Docs</a>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
