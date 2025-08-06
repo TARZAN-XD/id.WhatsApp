@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: elite-video-downloader
+    env: node
+    buildCommand: "npm install && npm run install-backend"
+    startCommand: "npm start"
