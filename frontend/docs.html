@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>API Documentation - Elite Downloader</title>
+  <style>
+    body { background: #111; color: #fff; font-family: Arial; padding: 20px; }
+    h1 { color: crimson; }
+    .endpoint { margin-bottom: 20px; background: #222; padding: 15px; border-radius: 8px; }
+    code { background: #333; padding: 5px; display: block; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Elite Downloader API</h1>
+  <p>استخدم API Key: <b>ELITE123</b></p>
+
+  <div class="endpoint">
+    <h2>تحميل الفيديوهات</h2>
+    <p><b>POST</b> /api/download</p>
+    <p>Body:</p>
+    <code>{ "url": "https://youtube.com/watch?v=..." }</code>
+    <p>Headers:</p>
+    <code>x-api-key: ELITE123</code>
+    <p>Response:</p>
+    <code>{ "title": "...", "formats": [...] }</code>
+  </div>
+
+  <div class="endpoint">
+    <h2>بحث في YouTube</h2>
+    <p><b>GET</b> /api/youtube/search?q=keyword</p>
+    <p>Headers:</p>
+    <code>x-api-key: ELITE123</code>
+  </div>
+</body>
+</html>
